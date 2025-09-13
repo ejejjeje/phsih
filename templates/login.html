@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="background">
+    <div class="login-box">
+      <h2>Login to Account</h2>
+      <p>Please enter your email and password to continue</p>
+
+      <form id="login-form" action="/login" method="POST">
+        <label class="text-label">Email address:</label>
+        <input type="email" id="email" placeholder="Enter E-mail" required />
+
+        <div class="text-label">
+          <label>Password</label>
+          <a href="{{ url_for('forgot_password') }}" class="forgot">Forgot Password?</a>
+        </div>
+        <input type="password" id="password" placeholder="●●●●●●●" required />
+
+        <button type="submit">Sign In</button>
+      </form>
+
+      <p class="bottom-text">
+        Don't have an account? <a href="/signup">Create Account</a>
+      </p>
+    </div>
+  </div>
+
+  <script>
+    document.getElementById("login-form").addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const email = document.getElementById("email").value;
+      const password = document.getElementById("password").value;
+
+      try {
+        const res = await fetch("/login", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json"
+  },
+  credentials: "include",
+  body: JSON.stringify({ email, password })
+});
+
+// ✅ Only parse JSON if content exists
+let data;
+try {
+  data = await res.json();
+} catch (err) {
+  alert("Server returned invalid response.");
+  return;
+}
+
+if (res.ok) {
+  window.location.href = "/dashboard";
+} else {
+  alert(data.message || "Login failed.");
+}
+
+      } catch (error) {
+        alert("Error occurred: " + error.message);
+        console.error(error);
+      }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Phishing Scanner</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+
+<header>
+  <div class="left-section">
+    <!-- LOGO & HAMBURGER -->
+    <div class="logo">
+      <img src="/static/logo.png" alt="logo" />
+      <button id="hamburger" class="menu-toggle" title="Menu">☰</button>
+    </div>
+  </div>
+
+  <!-- NAV LINKS -->
+  <nav id="main-nav" class="nav-links">
+    <a href="{{ url_for('scanner') }}" class="active">URL and Domain Scanner</a>
+    <a href="{{ url_for('block_page') }}">Blocking</a>
+    <a href="{{ url_for('dashboard') }}">Dashboard</a>
+  </nav>
+
+<!-- PROFILE -->
+<div class="profile">
+  <nav class="notification-nav">
+    {% if current_user.is_authenticated %}
+      <!-- Bell only when logged in -->
+      <span class="bell" id="notif-bell" title="Notifications">
+        🔔<span class="notif-badge" id="notif-count" style="display: none;">0</span>
+      </span>
+    {% endif %}
+  </nav>
+
+  {% if current_user.is_authenticated %}
+    <!-- Logged in user -->
+    <span id="nav-user">{{ current_user.username }}</span>
+    <div class="dropdown">
+      <button id="menu-btn" class="menu-btn" title="Menu">⋮</button>
+      <div class="dropdown-content" id="dropdown-menu">
+        <form method="POST" action="{{ url_for('logout') }}">
+          <button type="submit">Log Out</button>
+        </form>
+      </div>
+    </div>
+  {% else %}
+    <!-- Guest -->
+    <span id="nav-user" class="guest-label">Guest</span>
+    <div class="dropdown">
+      <button id="menu-btn" class="menu-btn" title="Menu">⋮</button>
+      <div class="dropdown-content" id="dropdown-menu">
+        <form method="GET" action="{{ url_for('login_page') }}">
+          <button type="submit">Log In</button>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+</div>
+</header>
+
+<!-- Notification Panel -->
+<div class="notification-panel" id="notification-panel" style="display: none;">
+  <div class="panel-header">
+    <h4>Notifications</h4>
+    <button id="clear-notifications">Clear All</button>
+  </div>
+  <div class="panel-body" id="notification-list"></div>
+</div>
+
+<!-- Main Scanner UI -->
+<div class="main-container">
+  <div class="scanner-box">
+    <h2>Scan Here to Check If the Link Is a Phishing Threat!</h2>
+    <input type="text" id="urlInput" placeholder="Type any URL or Domain" />
+    <br> <br>
+    <button id="scanBtn">Scan</button>
+
+    <div id="progressContainer">
+      <div id="progressBar">0%</div>
+    </div>
+
+    <div id="result" style="margin-top: 20px; font-weight: bold;"></div>
+    <button id="blockBtn" style="display: none; margin-top: 10px;">Block This URL</button>
+  </div>
+</div>
+
+<script>
+  const menuBtn = document.getElementById("menu-btn");
+  const dropdown = document.getElementById("dropdown-menu");
+  const hamburger = document.getElementById("hamburger");
+  const nav = document.getElementById("main-nav");
+
+  window.addEventListener("click", function (e) {
+    if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = "none";
+    }
+  });
+
+  menuBtn.addEventListener("click", function () {
+    dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+  });
+
+  hamburger.addEventListener("click", function () {
+    nav.classList.toggle("visible");
+  });
+
+  function getTimeAgo(timestamp) {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const localThen = new Date(then.getTime() + (new Date().getTimezoneOffset() * -60000));
+    const diffSec = Math.floor((now - localThen) / 1000);
+    if (diffSec < 60) return 'just now';
+    const mins = Math.floor(diffSec / 60);
+    if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days} day${days !== 1 ? 's' : ''} ago`;
+  }
+
+  function updateNotificationsUI(showPanelTemporarily = false) {
+    const panel = document.getElementById("notification-panel");
+    const list = document.getElementById("notification-list");
+    const badge = document.getElementById("notif-count");
+
+    fetch('/get_notifications')
+      .then(res => res.json())
+      .then(data => {
+        list.innerHTML = "";
+
+        if (data.length > 0) {
+          badge.style.display = "inline-block";
+          badge.textContent = data.length;
+
+          if (showPanelTemporarily) {
+            panel.style.display = "block";
+            setTimeout(() => {
+              panel.style.display = "none";
+            }, 3000);
+          }
+        } else {
+          badge.style.display = "none";
+          panel.style.display = "none";
+        }
+
+        data.slice().reverse().forEach(note => {
+          const item = document.createElement("div");
+          item.className = "notification-item";
+
+          let icon = "ℹ️ INFO";
+          let title = "Info";
+          let desc = note.message;
+
+          if (note.message.includes("Result: Safe")) {
+            icon = "✅ SAFE";
+            title = "Safe";
+            desc = "This site appears to be safe and no threats were detected.";
+          } else if (note.message.includes("Result: Phish")) {
+            icon = "⚠️ ALERT";
+            title = "ALERT";
+            desc = "This site has been flagged as a phishing threat.";
+          } else if (note.message.includes("Result: Already Blocked") || note.message.includes("blocked")) {
+            icon = "⛔ BLOCKED";
+            title = "Blocked URL";
+            desc = "This URL has been manually blocked and is inaccessible.";
+          }
+
+          item.innerHTML = `
+            <small>${icon} <span class="time">${getTimeAgo(note.timestamp)}</span></small>
+            <p><strong>${title}</strong><br>${desc}</p>
+          `;
+          list.prepend(item);
+        });
+      })
+      .catch(err => {
+        console.error("Failed to load notifications:", err);
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const bell = document.getElementById("notif-bell");
+    const panel = document.getElementById("notification-panel");
+    const clearBtn = document.getElementById("clear-notifications");
+
+    bell.addEventListener("click", (e) => {
+      e.stopPropagation();
+      panel.style.display = panel.style.display === "block" ? "none" : "block";
+    });
+
+    clearBtn.addEventListener("click", () => {
+      fetch('/clear_notifications', { method: 'POST' })
+        .then(() => {
+          panel.style.display = "none";
+          document.getElementById("notif-count").style.display = "none";
+          document.getElementById("notification-list").innerHTML = "";
+        });
+    });
+
+    document.addEventListener("click", (e) => {
+      if (!panel.contains(e.target) && e.target !== bell) {
+        panel.style.display = "none";
+      }
+    });
+
+    updateNotificationsUI(false);
+  });
+
+  document.getElementById("scanBtn").addEventListener("click", async () => {
+    const url = document.getElementById("urlInput").value.trim();
+    const resultDiv = document.getElementById("result");
+    const progressContainer = document.getElementById("progressContainer");
+    const progressBar = document.getElementById("progressBar");
+    const blockBtn = document.getElementById("blockBtn");
+
+    if (!url) {
+      resultDiv.innerText = "Please enter a URL.";
+      blockBtn.style.display = "none";
+      return;
+    }
+
+    progressContainer.style.display = 'block';
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    resultDiv.innerText = '';
+    blockBtn.style.display = "none";
+
+    let progress = 0;
+    const increment = 5;
+    const interval = setInterval(() => {
+      progress = Math.min(progress + increment, 95);
+      progressBar.style.width = `${progress}%`;
+      progressBar.textContent = `${progress}%`;
+    }, 50);
+
+    try {
+      // ✅ Add `manual: true` here
+      const response = await fetch("/predict", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url, manual: true })
+      });
+
+      clearInterval(interval);
+
+      if (response.ok) {
+        const data = await response.json();
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+
+        if (!data.result) {
+          resultDiv.innerText = "Unexpected server response.";
+        } else {
+          resultDiv.innerText = `Result: ${data.result}`;
+          updateNotificationsUI(true);
+
+          if (data.result.toLowerCase() === "phish") {
+            blockBtn.style.display = "inline-block";
+          } else if (data.result.toLowerCase() === "already blocked") {
+            blockBtn.style.display = "none";
+            resultDiv.innerText = "Result: 🚫 Already Blocked";
+          } else {
+            blockBtn.style.display = "none";
+          }
+        }
+      } else {
+        progressBar.style.width = '0%';
+        progressBar.textContent = '0%';
+        resultDiv.innerText = "Error scanning URL.";
+        blockBtn.style.display = "none";
+      }
+    } catch (error) {
+      clearInterval(interval);
+      progressBar.style.width = '0%';
+      progressBar.textContent = '0%';
+      resultDiv.innerText = "Network error.";
+      console.error("Scan error:", error);
+      blockBtn.style.display = "none";
+    }
+});
+
+
+  document.getElementById("blockBtn").addEventListener("click", async () => {
+  const scannedUrl = document.getElementById("urlInput").value;
+
+  try {
+    const response = await fetch("/block_url", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: scannedUrl })
+    });
+
+    const data = await response.json();  // parse JSON message
+
+    if (response.ok && data.status === "blocked") {
+      alert(data.message);  // e.g., "URL successfully blocked"
+      window.location.href = "/blockpage";
+    } else {
+      // Show server-provided message (e.g., "Login required")
+      alert(data.message || "Failed to block URL.");
+    }
+  } catch (err) {
+    console.error("Block URL error:", err);
+    alert("Network error. Failed to block URL.");
+  }
+});
+
+
+  
+</script>
+
+</body>
+</html>

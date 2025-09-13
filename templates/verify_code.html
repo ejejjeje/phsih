@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Verify Code</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <div class="background">
+    <div class="login-box">
+      <h2>Enter Verification Code</h2>
+      <p>Please check your email and enter the 6-digit code below.</p>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% for category, message in messages %}
+          <div class="alert {{ category }}">{{ message }}</div>
+        {% endfor %}
+      {% endwith %}
+
+      <form method="POST">
+        <input type="text" name="code" placeholder="Enter 6-digit code" required>
+        <button type="submit">Verify</button>
+      </form>
+
+      <div class="bottom-text">
+        <a href="{{ url_for('login_page') }}">Back to Login</a>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

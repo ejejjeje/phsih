@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Blocking Page</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body>
+
+<header>
+  <div class="left-section">
+    <!-- LOGO -->
+    <div class="logo">
+      <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" />
+      <button id="hamburger" class="menu-toggle" title="Menu">☰</button>
+    </div>
+  </div>
+
+  <!-- NAV LINKS -->
+  <nav id="main-nav" class="nav-links">
+    <a href="{{ url_for('scanner') }}" id="nav-scanner">URL and Domain Scanner</a>
+    <a href="{{ url_for('block_page') }}" id="nav-blocking" class="active">Blocking</a>
+    <a href="{{ url_for('dashboard') }}" id="nav-dashboard">Dashboard</a>
+  </nav>
+
+  <!-- PROFILE & RIGHT SECTION -->
+  <div class="profile">
+    <nav class="notification-nav">
+      <span class="bell" title="Notifications">
+        🔔<span class="notif-badge" id="notif-count" style="display: none;">0</span>
+      </span>
+    </nav>
+
+    {% if user %}
+      <span id="nav-user">{{ user.username }}</span>
+    {% else %}
+      <span id="nav-user">Guest</span>
+    {% endif %}
+
+    <div class="dropdown">
+      <button id="menu-btn" class="menu-btn" title="Menu">⋮</button>
+      <div class="dropdown-content" id="dropdown-menu">
+        <form method="POST" action="{{ url_for('logout') }}">
+          <button type="submit">Log Out</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</header>
+
+<!-- ✅ Notification Panel -->
+<div class="notification-panel" id="notification-panel" style="display: none;">
+  <div class="panel-header">
+    <h4>Notifications</h4>
+    <button id="clear-notifications">Clear All</button>
+  </div>
+  <div class="panel-body" id="notification-list"></div>
+</div>
+
+<!-- ✅ Main Page -->
+<div class="page">
+  <div class="container">
+    <div class="section-title">Blacklist</div>
+    <div class="table-container">
+    <table class="responsive-table">
+      <thead>
+        <tr>
+          <th>Source URL</th>
+          <th>Domain Name</th>
+          <th>IP Address</th>
+          <th>Status</th>
+          <th>Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in blocked_urls %}
+          <tr>
+            <td>{{ item.url }}</td>
+            <td>{{ item.domain or '-' }}</td>
+            <td>{{ item.ip_address or '-' }}</td>
+            <td><span class="status-phish">Phish</span></td>
+            <td>
+              <form method="POST" action="{{ url_for('remove_blacklist', id=item.id) }}">
+                <input type="hidden" name="url_id" value="{{ item.id }}">
+                <button type="submit" class="icon-button" title="Remove">🗑️</button>
+              </form>
+            </td>
+          </tr>
+        {% else %}
+          <tr><td colspan="5">No blocked URLs.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+  </div>
+</div>
+
+<!-- ✅ Scripts -->
+<script>
+  const menuBtn = document.getElementById("menu-btn");
+  const dropdown = document.getElementById("dropdown-menu");
+
+  window.addEventListener("click", function (e) {
+    if (!menuBtn.contains(e.target) && !dropdown.contains(e.target)) {
+      dropdown.style.display = "none";
+    }
+  });
+
+  menuBtn.addEventListener("click", function () {
+    dropdown.style.display = dropdown.style.display === "block" ? "none" : "block";
+  });
+
+  function getTimeAgo(timestamp) {
+    const now = new Date();
+    const then = new Date(timestamp);
+    const localThen = new Date(then.getTime() + (new Date().getTimezoneOffset() * -60000));
+    const diffSec = Math.floor((now - localThen) / 1000);
+    if (diffSec < 60) return 'just now';
+    const mins = Math.floor(diffSec / 60);
+    if (mins < 60) return `${mins} minute${mins !== 1 ? 's' : ''} ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs} hour${hrs !== 1 ? 's' : ''} ago`;
+    const days = Math.floor(hrs / 24);
+    return `${days} day${days !== 1 ? 's' : ''} ago`;
+  }
+
+  function updateNotificationsUI() {
+    const panel = document.getElementById("notification-panel");
+    const list = document.getElementById("notification-list");
+    const badge = document.getElementById("notif-count");
+
+    fetch('/get_notifications')
+      .then(res => res.json())
+      .then(data => {
+        list.innerHTML = "";
+
+        if (data.length > 0) {
+          badge.style.display = "inline-block";
+          badge.textContent = data.length;
+        } else {
+          badge.style.display = "none";
+          panel.style.display = "none";
+        }
+
+        data.slice().reverse().forEach(note => {
+          const item = document.createElement("div");
+          item.className = "notification-item";
+
+          let icon = "ℹ️ INFO";
+          let title = "Info";
+          let desc = note.message;
+
+          if (note.message.includes("Result: Safe")) {
+            icon = "✅ SAFE";
+            title = "Safe";
+            desc = "This site appears to be safe and no threats were detected.";
+          } else if (note.message.includes("Result: Phish")) {
+            icon = "⚠️ ALERT";
+            title = "ALERT";
+            desc = "This site has been flagged as a phishing threat.</a>";
+          } else if (note.message.includes("blocked")) {
+            icon = "⛔ BLOCKED";
+            title = "Blocked URL";
+            desc = "This URL or domain has been manually blocked.";
+          }
+
+          item.innerHTML = `
+            <small>${icon} <span class="time">${getTimeAgo(note.timestamp)}</span></small>
+            <p><strong>${title}</strong><br>${desc}</p>
+          `;
+          list.prepend(item);
+        });
+      })
+      .catch(err => {
+        console.error("Failed to load notifications:", err);
+      });
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    const bell = document.querySelector(".bell");
+    const clearBtn = document.getElementById("clear-notifications");
+    const hamburger = document.getElementById("hamburger");
+    const nav = document.getElementById("main-nav");
+
+    bell.addEventListener("click", () => {
+      const panel = document.getElementById("notification-panel");
+      panel.style.display = panel.style.display === "block" ? "none" : "block";
+    });
+
+    clearBtn.addEventListener("click", () => {
+      fetch('/clear_notifications', { method: 'POST' }).then(() => {
+        document.getElementById("notification-panel").style.display = "none";
+        document.getElementById("notif-count").style.display = "none";
+        document.getElementById("notification-list").innerHTML = "";
+      });
+    });
+
+    hamburger.addEventListener("click", () => {
+      nav.classList.toggle("visible");
+    });
+
+    updateNotificationsUI();
+  });
+</script>
+
+</body>
+</html>
