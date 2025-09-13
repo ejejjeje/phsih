@@ -16,6 +16,7 @@ import random
 import socket
 import time
 import string
+import os
 import concurrent.futures
 import pandas as pd
 
@@ -27,17 +28,19 @@ rf_model = joblib.load("trained_models/randomForest_final.pkl")
 app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
-# Configuration
-app.config['SECRET_KEY'] = 'super-secret-key'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:06032004@localhost:5432/phishing_db'
+# Configuration from environment variables
+app.config['SECRET_KEY'] = os.environ.get("SECRET_KEY", "dev-secret")
+
+# Database
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get("DATABASE_URL")
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 # Mail setup
-app.config['MAIL_SERVER'] = 'smtp.gmail.com'
-app.config['MAIL_PORT'] = 587
-app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = 'terraphish00@gmail.com'         # 👈 Set your email
-app.config['MAIL_PASSWORD'] = 'mzxj obpm etek itrw'            # 👈 Use an App Password (not your Gmail password)
+app.config['MAIL_SERVER'] = os.environ.get("MAIL_SERVER", "smtp.gmail.com")
+app.config['MAIL_PORT'] = int(os.environ.get("MAIL_PORT", 587))
+app.config['MAIL_USE_TLS'] = os.environ.get("MAIL_USE_TLS", "True") == "True"
+app.config['MAIL_USERNAME'] = os.environ.get("MAIL_USERNAME")
+app.config['MAIL_PASSWORD'] = os.environ.get("MAIL_PASSWORD")
 
 mail = Mail(app)
 
